@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Geolocation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Browser Geolocation</h1>
+    <button onclick="testGeolocation()">Test Location</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function testGeolocation() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            // Test 1: Check if geolocation is supported
+            const supportedDiv = document.createElement('div');
+            supportedDiv.className = 'result';
+            if ('geolocation' in navigator) {
+                supportedDiv.className += ' success';
+                supportedDiv.innerHTML = '<strong>✓ Geolocation is supported</strong>';
+            } else {
+                supportedDiv.className += ' error';
+                supportedDiv.innerHTML = '<strong>✗ Geolocation is NOT supported</strong>';
+            }
+            resultsDiv.appendChild(supportedDiv);
+            
+            if (!('geolocation' in navigator)) {
+                return;
+            }
+            
+            // Test 2: Request location
+            const locationDiv = document.createElement('div');
+            locationDiv.className = 'result';
+            locationDiv.innerHTML = '<strong>Requesting location...</strong>';
+            resultsDiv.appendChild(locationDiv);
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const successDiv = document.createElement('div');
+                    successDiv.className = 'result success';
+                    successDiv.innerHTML = `
+                        <strong>✓ Location captured successfully!</strong><br>
+                        Latitude: ${position.coords.latitude}<br>
+                        Longitude: ${position.coords.longitude}<br>
+                        Accuracy: ${position.coords.accuracy} meters<br>
+                        Altitude: ${position.coords.altitude || 'N/A'}<br>
+                        Altitude Accuracy: ${position.coords.altitudeAccuracy || 'N/A'}<br>
+                        Heading: ${position.coords.heading || 'N/A'}<br>
+                        Speed: ${position.coords.speed || 'N/A'}<br>
+                        Timestamp: ${new Date(position.timestamp).toLocaleString()}
+                    `;
+                    resultsDiv.appendChild(successDiv);
+                    
+                    // Add Google Maps link
+                    const mapsDiv = document.createElement('div');
+                    mapsDiv.className = 'result';
+                    mapsDiv.innerHTML = `<a href="https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}" target="_blank">View on Google Maps</a>`;
+                    resultsDiv.appendChild(mapsDiv);
+                },
+                (error) => {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'result error';
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'User denied the request for geolocation';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Location information is unavailable';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'The request to get user location timed out';
+                            break;
+                        default:
+                            errorMessage = 'An unknown error occurred';
+                    }
+                    errorDiv.innerHTML = `
+                        <strong>✗ Geolocation error</strong><br>
+                        Error code: ${error.code}<br>
+                        Error message: ${errorMessage}<br>
+                        Full error: ${error.message}
+                    `;
+                    resultsDiv.appendChild(errorDiv);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+    </script>
+</body>
+</html>
