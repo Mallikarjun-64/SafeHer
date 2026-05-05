@@ -116,7 +116,7 @@ export default function GuardianSetup() {
 
   const goToDashboard = () => {
     // Get user role from metadata and redirect to appropriate dashboard
-    const userRole = user?.user_metadata?.role || 'user';
+    const userRole = user?.role || 'user';
     
     if (userRole === 'guardian') {
       navigate("/dashboard/guardian");
