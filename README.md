@@ -18,42 +18,47 @@ SafeHer is a comprehensive women's safety application designed to provide instan
 - **Database & Auth**: Firebase (Authentication & Cloud Firestore).
 - **Notifications**: Nodemailer (Gmail API).
 
-## 📋 Setup Instructions
+### SafeHer - Guardian Angel Alert System
 
-### 1. Prerequisites
-- Node.js (v18+)
-- A Firebase Project
-- A Gmail account with 2-Step Verification enabled
+A unified safety platform for women, providing instant emergency alerts, live location tracking, and community-driven protection.
 
-### 2. Frontend Configuration
-Create a `.env` file in the root directory:
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-```
+## Core Architecture
+- **Frontend**: React + Vite + Tailwind CSS
+- **Database/Auth**: Firebase Firestore & Firebase Authentication
+- **Backend**: Node.js (Express) for SOS Email Notifications
+- **Real-time**: Firestore Snapshots for Live Feed
 
-### 3. Backend Configuration
-Navigate to the `server` directory and create a `.env` file:
-```env
-PORT=3001
-GMAIL_USER=your-email@gmail.com
-GMAIL_APP_PASSWORD=your-16-char-app-password
-FIREBASE_PROJECT_ID=your-project-id
-```
+## Setup Instructions
 
-**Service Account Setup:**
-1.  Go to Firebase Console -> Project Settings -> Service Accounts.
-2.  Generate a new private key (JSON).
-3.  Rename it to `serviceAccountKey.json` and place it inside the `server` folder.
+### 1. Firebase Setup
+- Create a Firebase project.
+- Enable **Authentication** (Email/Password).
+- Enable **Firestore Database**.
+- Update `src/lib/firebase.ts` with your config.
 
-### 4. Installation & Running
-From the root directory:
-```bash
-# Install root dependencies
+### 2. Backend Setup
+- Navigate to `server/`.
+- Run `npm install`.
+- Place your Firebase **serviceAccountKey.json** in the `server/` directory.
+- Create a `.env` file in `server/` with:
+  ```env
+  GMAIL_USER=your-email@gmail.com
+  GMAIL_APP_PASSWORD=your-app-password
+  FIREBASE_PROJECT_ID=your-project-id
+  ```
+- Run `npm run dev` to start the backend.
+
+### 3. Frontend Setup
+- Navigate to the root directory.
+- Run `npm install`.
+- Run `npm run dev`.
+
+## Data Model (Firestore)
+- `users/{userId}`: User profiles and settings.
+- `users/{userId}/guardians`: Sub-collection of trusted contacts.
+- `users/{userId}/emergency_alerts`: Sub-collection of SOS events.
+- `helplines`: Global collection of emergency numbers.
+- `police_stations`: Global collection of police stations.
 npm install
 
 # Install backend dependencies

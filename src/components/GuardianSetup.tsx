@@ -23,9 +23,10 @@ import {
   Sparkles,
   Zap
 } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, addDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 interface Guardian {
   id: string;
@@ -87,22 +88,22 @@ export default function GuardianSetup() {
       return;
     }
 
+    if (!user) return;
+
     setIsSubmitting(true);
     try {
-      // Save guardians to database
-      const { error } = await supabase
-        .from("guardians")
-        .insert(
-          guardians.map(g => ({
-            user_id: user?.id,
-            name: g.name,
-            email: g.email,
-            phone: g.phone || null,
-            relation: g.relationship || null
-          }))
-        );
-
-      if (error) throw error;
+      // Save guardians to Firestore sub-collection
+      const guardiansRef = collection(db, "users", user.id, "guardians");
+      
+      for (const g of guardians) {
+        await addDoc(guardiansRef, {
+          name: g.name,
+          email: g.email,
+          phone: g.phone || null,
+          relation: g.relationship || null,
+          createdAt: new Date().toISOString()
+        });
+      }
 
       toast.success(`Successfully added ${guardians.length} guardian(s)!`);
       goToDashboard();

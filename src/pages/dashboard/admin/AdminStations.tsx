@@ -3,7 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { collection, query, getDocs, addDoc, deleteDoc, doc, orderBy } from "firebase/firestore";
 import { toast } from "sonner";
 import { Trash2, Plus, Loader2 } from "lucide-react";
 
@@ -16,25 +17,42 @@ export default function AdminStations() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("police_stations").select("id,name,phone,address").order("name");
-    setList((data ?? []) as Station[]);
-    setLoading(false);
+    try {
+      const q = query(collection(db, "police_stations"), orderBy("name"));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Station));
+      setList(data);
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error("Name required");
-    const { error } = await supabase.from("police_stations").insert([{ name: form.name.trim(), phone: form.phone || null, address: form.address || null }]);
-    if (error) return toast.error(error.message);
-    setForm({ name: "", phone: "", address: "" });
-    toast.success("Added");
-    load();
+    try {
+      await addDoc(collection(db, "police_stations"), {
+        name: form.name.trim(),
+        phone: form.phone || null,
+        address: form.address || null
+      });
+      setForm({ name: "", phone: "", address: "" });
+      toast.success("Added");
+      load();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
   const remove = async (id: string) => {
-    const { error } = await supabase.from("police_stations").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    load();
+    try {
+      await deleteDoc(doc(db, "police_stations", id));
+      load();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   return (

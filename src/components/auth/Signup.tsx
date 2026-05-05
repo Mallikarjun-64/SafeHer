@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { supabase } from '@/lib/supabase'
+// Firebase Auth used instead of Supabase
 import { useToast } from '@/hooks/use-toast'
 
 export const Signup: React.FC = () => {
@@ -16,18 +16,13 @@ export const Signup: React.FC = () => {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
-        }
-      })
-
-      if (error) throw error
+      const { auth } = await import('@/lib/firebase');
+      const { createUserWithEmailAndPassword } = await import('firebase/auth');
+      await createUserWithEmailAndPassword(auth, email, 'password123');
 
       toast({
         title: "Check your email",
-        description: "We sent you a magic link to complete your signup."
+        description: "We sent you a verification link to complete your signup."
       })
     } catch (error: any) {
       toast({

@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { 
+  collection, 
+  query, 
+  getDocs, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  updateDoc, 
+  doc, 
+  getDoc, 
+  collectionGroup, 
+  Timestamp 
+} from "firebase/firestore";
 import { toast } from "sonner";
 import { Loader2, MapPin, RefreshCw } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
@@ -34,48 +47,75 @@ export default function AlertFeed({
 
   const fetchAlerts = async () => {
     setLoading(true);
-    const { data: rows } = await supabase
-      .from("alerts")
-      .select("id,user_id,status,latitude,longitude,created_at,message")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    const list = (rows ?? []) as AlertRow[];
-    const ids = Array.from(new Set(list.map((a) => a.user_id)));
-    if (ids.length) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id,full_name,phone")
-        .in("id", ids);
-      const map = new Map((profs ?? []).map((p: any) => [p.id, p]));
-      list.forEach((a) => { a.profile = map.get(a.user_id) as any; });
+    try {
+      const q = query(
+        collectionGroup(db, "emergency_alerts"),
+        orderBy("createdAt", "desc"),
+        limit(100)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const list: AlertRow[] = [];
+      
+      for (const alertDoc of querySnapshot.docs) {
+        const d = alertDoc.data();
+        const userId = alertDoc.ref.parent.parent?.id || "";
+        
+        const alertRow: AlertRow = {
+          id: alertDoc.id,
+          user_id: userId,
+          status: d.status,
+          latitude: d.latitude,
+          longitude: d.longitude,
+          created_at: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : (d.createdAt || new Date().toISOString()),
+          message: d.address || null,
+        };
+
+        if (userId) {
+          const userDoc = await getDoc(doc(db, "users", userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            alertRow.profile = {
+              full_name: userData.full_name || null,
+              phone: userData.phone || null,
+            };
+          }
+        }
+        list.push(alertRow);
+      }
+      setAlerts(list);
+    } catch (error: any) {
+      console.error("Error fetching alerts:", error);
+      toast.error("Failed to load alerts. Ensure collection group indexes are created.");
+    } finally {
+      setLoading(false);
     }
-    setAlerts(list);
-    setLoading(false);
   };
 
   useEffect(() => {
     fetchAlerts();
-    const ch = supabase
-      .channel("alerts-feed")
-      .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, () => {
-        fetchAlerts();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    const q = query(
+      collectionGroup(db, "emergency_alerts"),
+      orderBy("createdAt", "desc"),
+      limit(100)
+    );
+    const unsubscribe = onSnapshot(q, () => {
+      fetchAlerts();
+    }, (error) => {
+      console.error("Real-time alert error:", error);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const updateStatus = async (id: string, status: string) => {
-    const { error } = await supabase
-      .from("alerts")
-      .update({ status: status as any })
-      .eq("id", id);
-    if (error) return toast.error(error.message);
-    if (user) {
-      await supabase.from("alert_updates").insert([{
-        alert_id: id, updated_by: user.id, status: status as any, note: null,
-      }]);
+  const updateStatus = async (id: string, userId: string, status: string) => {
+    try {
+      const alertRef = doc(db, "users", userId, "emergency_alerts", id);
+      await updateDoc(alertRef, { status });
+      toast.success("Status updated");
+      fetchAlerts();
+    } catch (error: any) {
+      toast.error(error.message);
     }
-    toast.success("Status updated");
   };
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -116,7 +156,7 @@ export default function AlertFeed({
             </div>
             {canUpdate && (
               <div className="md:w-48">
-                <Select value={a.status} onValueChange={(v) => updateStatus(a.id, v)}>
+                <Select value={a.status} onValueChange={(v) => updateStatus(a.id, a.user_id, v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>

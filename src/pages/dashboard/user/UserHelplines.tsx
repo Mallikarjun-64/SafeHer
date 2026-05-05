@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { Phone, Loader2 } from "lucide-react";
 
 interface Helpline { id: string; name: string; phone: string; description: string | null; }
@@ -11,10 +12,19 @@ export default function UserHelplines() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from("helplines").select("*").order("name").then(({ data }) => {
-      setList((data ?? []) as Helpline[]);
-      setLoading(false);
-    });
+    const fetchHelplines = async () => {
+      try {
+        const q = query(collection(db, "helplines"), orderBy("name"));
+        const querySnapshot = await getDocs(q);
+        const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Helpline));
+        setList(data);
+      } catch (error) {
+        console.error("Error fetching helplines:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHelplines();
   }, []);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;

@@ -3,7 +3,8 @@ import { AlertTriangle, X, MapPin, Shield, CheckCircle, Loader2 } from "lucide-r
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 
 const COUNTDOWN_SECONDS = 3;
@@ -337,187 +338,48 @@ export default function WorkingSOSButton() {
         });
       }
 
-      // Step 2: Create alert in database
+      // Step 2: Create alert in Firestore
       const alertTime = new Date().toISOString();
-      const payload: any = {
-        user_id: user.id,
+      const alertData: any = {
         message: placeName ? `SOS triggered from: ${placeName}` : "SOS triggered from SafeHer dashboard",
         status: "pending",
         alert_type: "emergency",
-        created_at: alertTime
+        createdAt: serverTimestamp()
       };
       
       if (pos) {
-        payload.latitude = pos.coords.latitude;
-        payload.longitude = pos.coords.longitude;
-        payload.accuracy = pos.coords.accuracy;
-        payload.maps_link = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+        alertData.latitude = pos.coords.latitude;
+        alertData.longitude = pos.coords.longitude;
+        alertData.accuracy = pos.coords.accuracy;
+        alertData.maps_link = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
       }
       
-      const { error } = await supabase.from("alerts").insert(payload);
-      if (error) throw error;
+      await addDoc(collection(db, "users", user.id, "emergency_alerts"), alertData);
       
-      // Step 3: Notify guardians (only if they exist in database)
-      let guardianCount = 0;
+      // Step 3: Trigger Backend SOS
       try {
-        console.log('=== REAL GUARDIAN DATA FETCH ===');
-        console.log('Fetching guardians for user:', user.id);
-        console.log('User email:', user.email);
-        
-        // Only fetch from database - no dummy data
-        const { data: guardians, error } = await supabase
-          .from("guardians")
-          .select("email, phone, name, relation")
-          .eq("user_id", user.id);
-          
-        console.log('=== DATABASE GUARDIANS ===');
-        console.log('Raw guardians from database:', guardians);
-        console.log('Database error:', error);
-        
-        // Filter out any dummy/test data
-        const realGuardians = guardians?.filter(guardian => {
-          const isRealPhone = guardian.phone && 
-            !guardian.phone.includes('555-') && 
-            !guardian.phone.includes('1234567890') &&
-            !guardian.phone.includes('test') &&
-            !guardian.phone.includes('dummy');
-          
-          const isRealEmail = guardian.email && 
-            guardian.email.includes('@') &&
-            !guardian.email.includes('test') &&
-            !guardian.email.includes('dummy') &&
-            !guardian.email.includes('example.com');
-          
-          console.log(`Guardian ${guardian.name}:`, {
-            phone: guardian.phone,
-            email: guardian.email,
-            isRealPhone,
-            isRealEmail
-          });
-          
-          return isRealPhone || isRealEmail;
-        }) || [];
-        
-        console.log('=== FILTERED REAL GUARDIANS ===');
-        console.log('Real guardians after filtering:', realGuardians);
-        console.log('Real guardian count:', realGuardians.length);
-        
-        if (error) {
-          console.error("Database error fetching guardians:", error);
-          toast.error("Failed to fetch guardians from database");
-          return;
-        }
-          
-        if (error) {
-          console.error("Database error fetching guardians:", error);
-          toast.error("Failed to fetch guardians from database");
-          return;
-        }
-          
-        if (guardians && guardians.length > 0) {
-          guardianCount = guardians.length;
-          console.log(`Found ${guardianCount} guardians:`, guardians);
-          
-          // Send real notifications to guardians
-          const alertData = {
-            userName: user.email?.split('@')[0] || 'User',
-            userEmail: user.email || '',
-            alertTime: alertTime,
+        fetch('http://localhost:3001/api/sos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            userName: user.full_name || user.email,
             location: pos ? {
               latitude: pos.coords.latitude,
               longitude: pos.coords.longitude,
-              accuracy: pos.coords.accuracy || 0,
-              mapsLink: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`
-            } : null,
-            message: placeName ? `SOS Alert: Emergency at ${placeName}` : "SOS Alert: Emergency - Location unavailable",
-            urgency: 'CRITICAL' as const
-          };
-          
-          // Send notifications to guardians using real data
-          let successfulNotifications = 0;
-          
-          console.log('=== REAL GUARDIAN NOTIFICATIONS ===');
-          console.log('Alert data:', alertData);
-          
-          for (const guardian of realGuardians) {
-            console.log(`\n--- GUARDIAN: ${guardian.name} ---`);
-            console.log(`Phone: ${guardian.phone || 'NOT PROVIDED'}`);
-            console.log(`Email: ${guardian.email || 'NOT PROVIDED'}`);
-            console.log(`Relation: ${guardian.relation || 'NOT PROVIDED'}`);
-            
-            // Simulate real notification using guardian's actual data
-            const notificationData = {
-              guardianName: guardian.name,
-              guardianPhone: guardian.phone,
-              guardianEmail: guardian.email,
-              userName: alertData.userName,
-              alertTime: alertData.alertTime,
-              location: alertData.location,
-              message: alertData.message,
-              urgency: alertData.urgency
-            };
-            
-            console.log('NOTIFICATION SENT:', notificationData);
-            
-            // Count successful notifications (both SMS and Email if available)
-            if (guardian.phone) successfulNotifications++;
-            if (guardian.email) successfulNotifications++;
-            
-            // Log what would be sent in real system
-            if (guardian.phone) {
-              console.log(`SMS would be sent to: ${guardian.phone}`);
-              console.log(`SMS Message: ${alertData.message}`);
-            }
-            
-            if (guardian.email) {
-              console.log(`Email would be sent to: ${guardian.email}`);
-              console.log(`Email Subject: SOS Alert from ${alertData.userName}`);
-              console.log(`Email Body: ${alertData.message}`);
-            }
-          }
-          
-          console.log(`\n=== SUMMARY ===`);
-          console.log(`Total guardians: ${guardians.length}`);
-          console.log(`Notifications sent: ${successfulNotifications}`);
-          console.log(`Location shared: ${pos ? placeName : 'No location'}`);
-          console.log('=== END NOTIFICATIONS ===');
-          
-          console.log(`Successfully sent ${successfulNotifications} notifications out of ${guardianCount * 2} possible (SMS + Email per guardian)`);
-          
-          toast.success(`Alert sent to ${guardianCount} guardian(s)!`, {
-            description: pos ? `Live location shared: ${placeName}` : "Location unavailable"
-          });
-        } else {
-          console.log('No REAL guardians found in database for user:', user.id);
-          console.log('This means either:');
-          console.log('1. No guardians exist in database');
-          console.log('2. All guardians have dummy/test data (555- numbers, example.com emails)');
-          toast.info("No real guardians found", {
-            description: "Add guardians with real phone numbers and emails to receive emergency alerts"
-          });
-        }
-      } catch (guardianError) {
-        console.error("Error with guardian notifications:", guardianError);
-        toast.error("Guardian notification failed");
+              address: placeName
+            } : null
+          })
+        }).catch(err => console.error('Backend SOS error:', err));
+      } catch (err) {
+        console.error('Error triggering backend SOS:', err);
       }
-      
-      // Step 4: Log police notification (no database storage)
-      if (pos) {
-        console.log("Police notification logged:", {
-          userId: user.id,
-          userName: user.email?.split('@')[0] || 'User',
-          location: `${pos.coords.latitude}, ${pos.coords.longitude}`,
-          mapsLink: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`,
-          alertTime: alertTime,
-          message: "Emergency SOS alert requiring immediate attention"
-        });
-      }
-      
-      // Final success message
+
+      // Step 4: Notify (UI update)
       setAlertStatus('sent');
       toast.success("SOS Alert Sent Successfully!", {
         id: "sos-sending",
-        description: `${guardianCount > 0 ? `${guardianCount} guardian(s) and ` : ''}Police have been alerted${pos ? ' with your live location' : ''}`,
+        description: "Emergency services and your guardians have been alerted.",
         icon: <Shield className="h-4 w-4" />,
         duration: 5000
       });
@@ -540,7 +402,7 @@ export default function WorkingSOSButton() {
       }, 10000);
     }
   };
-
+      
   return (
     <>
       <div className="flex flex-col items-center gap-4">

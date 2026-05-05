@@ -67,12 +67,21 @@ export default function AlertSettings() {
   }, [user, navigate]);
 
   const handleSave = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      // Simulate saving settings to backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { db } = await import('@/lib/firebase');
+      const { doc, updateDoc, setDoc } = await import('firebase/firestore');
+      
+      // Save settings to user document
+      await setDoc(doc(db, 'users', user.id), {
+        alertSettings: settings,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
       toast.success('Alert settings saved successfully!');
     } catch (error) {
+      console.error('Error saving settings:', error);
       toast.error('Failed to save settings. Please try again.');
     } finally {
       setLoading(false);

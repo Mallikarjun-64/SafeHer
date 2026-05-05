@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { collection, query, getDocs, updateDoc, doc, orderBy, Timestamp } from "firebase/firestore";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,18 +21,38 @@ export default function AdminUsers() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-    setList((data ?? []) as Profile[]);
-    setLoading(false);
+    try {
+      const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          full_name: d.full_name || null,
+          phone: d.phone || null,
+          blocked: d.blocked || false,
+          verified: d.verified || false,
+          created_at: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : (d.createdAt || new Date().toISOString()),
+        } as Profile;
+      });
+      setList(data);
+    } catch (error: any) {
+      console.error("Error loading users:", error);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
   const toggle = async (id: string, field: "blocked" | "verified", value: boolean) => {
-    const update = field === "blocked" ? { blocked: value } : { verified: value };
-    const { error } = await supabase.from("profiles").update(update).eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Updated");
-    load();
+    try {
+      const update = field === "blocked" ? { blocked: value } : { verified: value };
+      await updateDoc(doc(db, "users", id), update);
+      toast.success("Updated");
+      load();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;

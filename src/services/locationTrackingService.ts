@@ -141,8 +141,8 @@ class LocationTrackingService {
    */
   private async storeLocation(locationData: LocationData): Promise<void> {
     try {
-      // Import supabase client
-      const { supabase } = await import('@/integrations/supabase/client');
+      const { db } = await import('@/lib/firebase');
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
       
       // Only store if we have valid location data
       if (locationData.latitude === 0 && locationData.longitude === 0) {
@@ -150,24 +150,18 @@ class LocationTrackingService {
         return;
       }
       
-      // Store location in alerts table as a location update
+      // Store location in user_locations sub-collection
       const locationRecord = {
-        user_id: locationData.userId,
-        message: `Location update: ${locationData.mapsLink}`,
-        status: 'pending' as const,
         latitude: locationData.latitude,
         longitude: locationData.longitude,
         accuracy: locationData.accuracy,
-        created_at: locationData.timestamp
+        mapsLink: locationData.mapsLink,
+        timestamp: locationData.timestamp,
+        createdAt: serverTimestamp()
       };
 
-      const { error } = await supabase.from('alerts').insert(locationRecord);
-      
-      if (error) {
-        console.error('Error storing location in database:', error);
-      } else {
-        console.log('Location data stored successfully in database');
-      }
+      await addDoc(collection(db, 'users', locationData.userId, 'user_locations'), locationRecord);
+      console.log('Location data stored successfully in Firestore');
     } catch (error) {
       console.error('Error storing location:', error);
     }

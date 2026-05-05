@@ -3,7 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/firebase";
+import { collection, query, getDocs, addDoc, deleteDoc, doc, orderBy } from "firebase/firestore";
 import { toast } from "sonner";
 import { Trash2, Plus, Loader2 } from "lucide-react";
 
@@ -16,25 +17,42 @@ export default function AdminHelplines() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("helplines").select("*").order("name");
-    setList((data ?? []) as H[]);
-    setLoading(false);
+    try {
+      const q = query(collection(db, "helplines"), orderBy("name"));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as H));
+      setList(data);
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.phone) return toast.error("Name and phone required");
-    const { error } = await supabase.from("helplines").insert([{ name: form.name, phone: form.phone, description: form.description || null }]);
-    if (error) return toast.error(error.message);
-    setForm({ name: "", phone: "", description: "" });
-    toast.success("Added");
-    load();
+    try {
+      await addDoc(collection(db, "helplines"), {
+        name: form.name,
+        phone: form.phone,
+        description: form.description || null
+      });
+      setForm({ name: "", phone: "", description: "" });
+      toast.success("Added");
+      load();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
   const remove = async (id: string) => {
-    const { error } = await supabase.from("helplines").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    load();
+    try {
+      await deleteDoc(doc(db, "helplines", id));
+      load();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   return (

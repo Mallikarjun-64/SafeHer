@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, X, Shield, MapPin, Users, Phone } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function SOSPage() {
+  const { user } = useAuth();
   const [counting, setCounting] = useState(false);
   const [count, setCount] = useState(3);
   const [sending, setSending] = useState(false);
@@ -43,15 +47,40 @@ export default function SOSPage() {
     toast.info("SOS cancelled");
   };
 
-  const fireAlert = () => {
+  const fireAlert = async () => {
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
+    try {
+      // 1. Log to Firestore if user is logged in
+      if (user) {
+        await addDoc(collection(db, "users", user.id, "emergency_alerts"), {
+          message: "SOS triggered from SOS Demo Page",
+          status: "pending",
+          createdAt: serverTimestamp()
+        });
+      }
+
+      // 2. Trigger Backend SOS
+      const res = await fetch('http://localhost:3001/api/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id || 'demo-user',
+          userName: user?.full_name || 'Demo User',
+          message: "SOS Alert from Demo Page"
+        })
+      });
+
+      if (!res.ok) throw new Error('Backend SOS failed');
+
       toast.success("SOS sent! Guardians and police have been alerted.", {
-        description: "Live location attached. Help is on the way!",
+        description: "Help is on the way!",
         duration: 5000,
       });
-    }, 2000);
+    } catch (err: any) {
+      toast.error("Failed to send SOS: " + err.message);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
