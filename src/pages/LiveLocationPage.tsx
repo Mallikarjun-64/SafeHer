@@ -207,7 +207,7 @@ export default function LiveLocationPage() {
                 <CardContent>
                   <div className="rounded-lg overflow-hidden h-96">
                     <iframe
-                      src={`https://maps.google.com/maps?q=${locationData.latitude},${locationData.longitude}&z=16&output=embed`}
+                      src={`https://maps.google.com/maps?q=${locationData.latitude},${locationData.longitude}&z=18&output=embed`}
                       width="100%"
                       height="100%"
                       style={{ border: 0 }}

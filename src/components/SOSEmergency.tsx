@@ -42,54 +42,127 @@ const SOSEmergency: React.FC = () => {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const locationRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Function to get current GPS location
+  // Reverse geocoding to get human-readable address from coordinates
+  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'User-Agent': 'SafeHer Location Service' } }
+      );
+      if (!response.ok) throw new Error('Geocoding failed');
+      const data = await response.json();
+      
+      // Build a readable address
+      const parts: string[] = [];
+      if (data.address?.road) parts.push(data.address.road);
+      if (data.address?.neighbourhood || data.address?.suburb) 
+        parts.push(data.address.neighbourhood || data.address.suburb);
+      if (data.address?.city || data.address?.town || data.address?.village)
+        parts.push(data.address.city || data.address.town || data.address.village);
+      if (data.address?.state) parts.push(data.address.state);
+      
+      return parts.length > 0 ? parts.join(', ') : data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+  };
+
+  // Function to get current GPS location with progressive accuracy improvement
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       console.error('Geolocation not supported by browser');
-      // Set fallback location
       setCurrentLocation({
         latitude: 12.9716,
         longitude: 77.5946,
-        address: 'Bangalore, India (Fallback Location)',
+        address: 'Geolocation not supported by browser',
         timestamp: new Date().toLocaleTimeString()
       });
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    // Use watchPosition to get progressively better readings
+    let bestAccuracy = Infinity;
+    let watchId: number | null = null;
+    let settled = false;
+
+    const settle = () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      settled = true;
+    };
+
+    // Stop watching after 20 seconds max
+    const timeoutId = setTimeout(() => {
+      if (!settled) {
+        settle();
+        // If we never got a reading, show warning
+        if (bestAccuracy === Infinity) {
+          setCurrentLocation(prev => ({
+            ...prev,
+            address: '⚠️ Could not get GPS fix — location may be approximate',
+            timestamp: new Date().toLocaleTimeString()
+          }));
+        }
+      }
+    }, 20000);
+
+    watchId = navigator.geolocation.watchPosition(
+      async (position) => {
         const { latitude, longitude, accuracy } = position.coords;
-        setCurrentLocation({
-          latitude,
-          longitude,
-          address: `GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${accuracy?.toFixed(0)}m)`,
-          timestamp: new Date().toLocaleTimeString()
-        });
-        console.log('Current location captured:', { latitude, longitude, accuracy });
+        console.log(`Location update: accuracy=${accuracy?.toFixed(0)}m (best so far: ${bestAccuracy.toFixed(0)}m)`);
+
+        // Only update if this reading is more accurate than previous
+        if (accuracy < bestAccuracy) {
+          bestAccuracy = accuracy;
+
+          const address = await reverseGeocode(latitude, longitude);
+
+          // Add accuracy warning for poor readings (>100m means IP/Wi-Fi based)
+          let accuracyNote = `±${accuracy?.toFixed(0)}m`;
+          if (accuracy > 500) {
+            accuracyNote += ' ⚠️ Low accuracy — IP-based location, use mobile for GPS precision';
+          } else if (accuracy > 100) {
+            accuracyNote += ' ⚠️ Approximate — Wi-Fi based';
+          }
+
+          setCurrentLocation({
+            latitude,
+            longitude,
+            address: `${address} (${accuracyNote})`,
+            timestamp: new Date().toLocaleTimeString()
+          });
+          console.log('Location updated:', { latitude, longitude, accuracy, address });
+
+          // If accuracy is good enough (<50m), stop watching
+          if (accuracy < 50) {
+            settle();
+            clearTimeout(timeoutId);
+          }
+        }
       },
       (error) => {
-        console.error('Error getting location:', error);
-        // Set fallback location based on error
-        let fallbackLocation = 'Unknown Location';
-        if (error.code === 1) {
-          fallbackLocation = 'Location permission denied - Using Bangalore, India';
-        } else if (error.code === 2) {
-          fallbackLocation = 'Location unavailable - Using Bangalore, India';
-        } else if (error.code === 3) {
-          fallbackLocation = 'Location timeout - Using Bangalore, India';
+        console.error('Geolocation error:', error);
+        // Don't override a previous good reading
+        if (bestAccuracy === Infinity) {
+          let msg = 'Location unavailable';
+          if (error.code === 1) msg = 'Location permission denied';
+          else if (error.code === 2) msg = 'Location unavailable';
+          else if (error.code === 3) msg = 'Location timeout — retrying...';
+
+          setCurrentLocation(prev => ({
+            ...prev,
+            address: `⚠️ ${msg}`,
+            timestamp: new Date().toLocaleTimeString()
+          }));
         }
-        
-        setCurrentLocation({
-          latitude: 12.9716,
-          longitude: 77.5946,
-          address: fallbackLocation,
-          timestamp: new Date().toLocaleTimeString()
-        });
       },
       {
-        enableHighAccuracy: false, // Changed to false for better compatibility
-        timeout: 5000, // Reduced timeout
-        maximumAge: 60000 // Allow cached location
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
       }
     );
   };
@@ -415,7 +488,7 @@ const SOSEmergency: React.FC = () => {
               <CardContent>
                 <div className="rounded-lg overflow-hidden h-64 relative">
                   <iframe
-                    src={`https://maps.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}&z=16&output=embed`}
+                    src={`https://maps.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}&z=18&output=embed`}
                     width="100%"
                     height="100%"
                     style={{ border: 0 }}
